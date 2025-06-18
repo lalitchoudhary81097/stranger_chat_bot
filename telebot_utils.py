@@ -8,17 +8,18 @@ class Telebot_utils:
     def __init__(self) -> None:
         logging.basicConfig(level=logging.INFO)
         
-        # Read from Render environment variables
+        # Correct environment variable keys (based on your Render settings)
         self.conn = psycopg2.connect(
             host=os.environ.get("SQL_HOST"),
-            database=os.environ.get("SQL_DATABASE"),
+            database=os.environ.get("SQL_DB"),
             user=os.environ.get("SQL_USER"),
-            password=os.environ.get("SQL_PASSWORD"),
+            password=os.environ.get("SQL_PASS"),
             port=os.environ.get("SQL_PORT"),
         )
 
         self.api = os.environ.get("BOT_TOKEN")
-        self.admin_id = int(os.environ.get("ADMIN_ID"))
+        admin_id_env = os.environ.get("ADMIN_ID")
+        self.admin_id = int(admin_id_env) if admin_id_env else 123456789  # fallback admin ID
         self.c = self.conn.cursor()
         self.lock = Lock()
         self.queue = []
