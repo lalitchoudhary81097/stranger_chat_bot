@@ -7,15 +7,9 @@ from threading import Lock
 class Telebot_utils:
     def __init__(self) -> None:
         logging.basicConfig(level=logging.INFO)
-        
-        # Correct environment variable keys (based on your Render settings)
-        self.conn = psycopg2.connect(
-            host=os.environ.get("SQL_HOST"),
-            database=os.environ.get("SQL_DB"),
-            user=os.environ.get("SQL_USER"),
-            password=os.environ.get("SQL_PASS"),
-            port=os.environ.get("SQL_PORT"),
-        )
+
+        # ✅ Using single DATABASE_URL environment variable
+        self.conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
 
         self.api = os.environ.get("BOT_TOKEN")
         admin_id_env = os.environ.get("ADMIN_ID")
@@ -29,11 +23,11 @@ class Telebot_utils:
         self.bot = telebot.TeleBot(self.api)
 
     def log_user(self, chat_id, username: str, user_first: str, user_last: str):
-        self.c.execute("SELECT * FROM botuser where user_id=(%s);", (chat_id,))
+        self.c.execute("SELECT * FROM botuser WHERE user_id = %s;", (chat_id,))
         results = self.c.fetchall()
         if len(results) == 0:
             self.c.execute(
-                "INSERT INTO botuser (user_id , username ,user_first , user_last) VALUES (%s,%s,%s,%s);",
+                "INSERT INTO botuser (user_id, username, user_first, user_last) VALUES (%s, %s, %s, %s);",
                 (chat_id, username, user_first, user_last),
             )
             self.conn.commit()
@@ -43,7 +37,7 @@ class Telebot_utils:
 
     def returnall(self, chat_id: int):
         if chat_id == self.admin_id:
-            self.c.execute("SELECT * from botuser;")
+            self.c.execute("SELECT * FROM botuser;")
             db = str(self.c.fetchall())
             return db
         else:
@@ -51,7 +45,7 @@ class Telebot_utils:
 
     def returnreported(self, chat_id: int):
         if chat_id == self.admin_id:
-            self.c.execute("SELECT * from reportlist;")
+            self.c.execute("SELECT * FROM reportlist;")
             rl = str(self.c.fetchall())
             return rl
         else:
@@ -66,27 +60,21 @@ class Telebot_utils:
     def requeue(self, chat_id: int):
         try:
             self.chating.remove(chat_id)
-            return
         except Exception as e:
             self.bot.send_message(self.admin_id, f"debug {chat_id} : {e} : requeue")
 
     def getid(self, chat_id: int):
-        if self.pairs.get(chat_id) is None:
-            return chat_id
-        else:
-            return self.pairs[chat_id]
+        return self.pairs.get(chat_id, chat_id)
 
     def remove_queue(self, chat_id: int):
         if chat_id in self.queue:
             with self.lock:
                 self.queue.remove(chat_id)
-        return
 
     def exit(self, chat_id: int, chat_to: int):
         try:
             del self.pairs[chat_id]
             del self.pairs[chat_to]
-            return
         except Exception as e:
             self.bot.send_message(self.admin_id, f"debug {chat_id} : {e} : exit")
 
@@ -94,19 +82,21 @@ class Telebot_utils:
         if chat_id in self.queue:
             return False
         with self.lock:
-            if self.temppairs.get(chat_id) is not None:
+            if self.temppairs.get(chat_id):
                 self.deletmpairs(chat_id)
             self.queue.append(chat_id)
             if len(self.queue) == 2:
-                self.pairs[chat_id] = self.queue[0]
-                self.temppairs[chat_id] = self.queue[0]
-                self.pairs[self.queue[0]] = chat_id
-                self.temppairs[self.queue[0]] = chat_id
-                del self.queue[:]
+                partner_id = self.queue[0]
+                self.pairs[chat_id] = partner_id
+                self.pairs[partner_id] = chat_id
+                self.temppairs[chat_id] = partner_id
+                self.temppairs[partner_id] = chat_id
+                self.queue.clear()
         return True
 
     def deletmpairs(self, chat_id: int):
-        del self.temppairs[chat_id]
+        if chat_id in self.temppairs:
+            del self.temppairs[chat_id]
 
     def inchating(self, chat_id: int):
         return chat_id in self.chating
@@ -115,15 +105,15 @@ class Telebot_utils:
         if self.inchating(chat_id):
             self.reportlog(self.getid(chat_id), chat_id)
             return True
-        else:
-            if self.temppairs.get(chat_id) is None:
-                return False
+        elif self.temppairs.get(chat_id):
             self.reportlog(self.temppairs[chat_id], chat_id)
             return True
+        else:
+            return False
 
     def reportlog(self, reported: int, reporter: int):
         self.c.execute(
-            "INSERT INTO reportlist(reported_id , reporter_id ) VALUES (%s,%s);",
+            "INSERT INTO reportlist (reported_id, reporter_id) VALUES (%s, %s);",
             (reported, reporter),
         )
         self.conn.commit()
