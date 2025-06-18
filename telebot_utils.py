@@ -8,19 +8,29 @@ class Telebot_utils:
     def __init__(self) -> None:
         logging.basicConfig(level=logging.INFO)
 
-        # ✅ Using single DATABASE_URL environment variable
-        self.conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        # ✅ Database connection with error handling
+        try:
+            self.conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        except Exception as e:
+            logging.error(f"Database connection failed: {e}")
+            raise
 
+        # ✅ Bot token setup with check
         self.api = os.environ.get("BOT_TOKEN")
+        if not self.api:
+            raise ValueError("BOT_TOKEN environment variable not set.")
+        self.bot = telebot.TeleBot(self.api)
+
+        # ✅ Admin ID with fallback
         admin_id_env = os.environ.get("ADMIN_ID")
-        self.admin_id = int(admin_id_env) if admin_id_env else 123456789  # fallback admin ID
+        self.admin_id = int(admin_id_env) if admin_id_env else 123456789
+
         self.c = self.conn.cursor()
         self.lock = Lock()
         self.queue = []
         self.chating = []
         self.pairs = {}
         self.temppairs = {}
-        self.bot = telebot.TeleBot(self.api)
 
     def log_user(self, chat_id, username: str, user_first: str, user_last: str):
         self.c.execute("SELECT * FROM botuser WHERE user_id = %s;", (chat_id,))
@@ -56,6 +66,7 @@ class Telebot_utils:
             return True
         else:
             self.chating.append(chat_id)
+            return False
 
     def requeue(self, chat_id: int):
         try:
