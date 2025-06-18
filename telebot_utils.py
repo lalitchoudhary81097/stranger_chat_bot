@@ -1,29 +1,31 @@
 import logging
+import os
 import psycopg2  # type: ignore
 import telebot  # type: ignore
 from threading import Lock
-from api_config import APIConfig
 
 class Telebot_utils:
     def __init__(self) -> None:
-        _logger = logging.basicConfig(level=logging.INFO)
-        config = APIConfig(logger=_logger).config
+        logging.basicConfig(level=logging.INFO)
+        
+        # Read from Render environment variables
         self.conn = psycopg2.connect(
-            host=config["SQL_HOST"],
-            database=config["SQL_DATABASE"],
-            user=config["SQL_USER"],
-            password=config["SQL_PASSWORD"],
-            port=config["SQL_PORT"],
+            host=os.environ.get("SQL_HOST"),
+            database=os.environ.get("SQL_DATABASE"),
+            user=os.environ.get("SQL_USER"),
+            password=os.environ.get("SQL_PASSWORD"),
+            port=os.environ.get("SQL_PORT"),
         )
-        self.api = config["TELEGRAM_API"]
-        self.admin_id = config["ADMIN_ID"]
+
+        self.api = os.environ.get("BOT_TOKEN")
+        self.admin_id = int(os.environ.get("ADMIN_ID"))
         self.c = self.conn.cursor()
         self.lock = Lock()
         self.queue = []
         self.chating = []
         self.pairs = {}
         self.temppairs = {}
-        self.bot = telebot.TeleBot(config["TELEGRAM_API"])
+        self.bot = telebot.TeleBot(self.api)
 
     def log_user(self, chat_id, username: str, user_first: str, user_last: str):
         self.c.execute("SELECT * FROM botuser where user_id=(%s);", (chat_id,))
